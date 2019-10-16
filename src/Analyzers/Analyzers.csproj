@@ -38,4 +38,9 @@
         <None Include="$(OutputPath)ManualMappingGuard.dll" Pack="true" PackagePath="lib/netstandard2.0" Visible="false" />
     </ItemGroup>
 
+    <PropertyGroup>
+      <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+      <GenerateBindingRedirectsOutputType>true</GenerateBindingRedirectsOutputType>
+    </PropertyGroup>
+
 </Project>

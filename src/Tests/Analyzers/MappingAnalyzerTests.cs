@@ -150,7 +150,7 @@ namespace ManualMappingGuard.Analyzers
 
         [MappingMethod]
         [UnmappedProperty(nameof(Person.Id))]
-        public Person Map() => new Person { FirstName = ""Test"" };
+        public static Person Map() => new Person { FirstName = ""Test"" };
       ");
 
       AssertUnmappedProperties(diagnostics, "LastName");
@@ -169,7 +169,7 @@ namespace ManualMappingGuard.Analyzers
 
         [MappingMethod]
         [UnmappedProperties(nameof(Person.Id))]
-        public Person Map() => new Person { FirstName = ""Test"" };
+        public static Person Map() => new Person { FirstName = ""Test"" };
       ");
 
       AssertUnmappedProperties(diagnostics, "LastName");
@@ -191,7 +191,7 @@ namespace ManualMappingGuard.Analyzers
         [MappingMethod]
         [UnmappedProperty(Person.IdPropertyName)]
         [UnmappedProperty(""LastName"")]
-        public Person Map() => new Person { FirstName = ""Test"" };
+        public static Person Map() => new Person { FirstName = ""Test"" };
       ");
 
       AssertNoUnmappedProperties(diagnostics);
@@ -212,7 +212,7 @@ namespace ManualMappingGuard.Analyzers
 
         [MappingMethod]
         [UnmappedProperties(Person.IdPropertyName, ""LastName"")]
-        public Person Map() => new Person { FirstName = ""Test"" };
+        public static Person Map() => new Person { FirstName = ""Test"" };
       ");
 
       AssertNoUnmappedProperties(diagnostics);
@@ -244,6 +244,178 @@ namespace ManualMappingGuard.Analyzers
       ");
 
       Assert.That(diagnostics, Is.Empty);
+    }
+
+    [Test]
+    public async Task DerivedUnmappedAttribute_WithoutBraces_DoesNotFail()
+    {
+      var diagnostics = await Analyze(@"
+        public class Base
+        {
+          public int Id { get; set; }
+        }
+
+        public class Person : Base
+        {
+          public string FirstName { get; set; }
+          public string LastName { get; set; }
+        }
+
+        [MappingMethod]
+        [BaseIgnoreProperties]
+        public static Person Map()
+        {
+          return new Person { FirstName = ""Test"", LastName = ""Test2"" };
+        }
+
+        [AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
+        public class BaseIgnorePropertiesAttribute : UnmappedPropertiesAttribute
+        {
+          public BaseIgnorePropertiesAttribute() 
+            : base(GetUnmappedPropertyNames())
+          {
+          }
+          
+          private static string[] GetUnmappedPropertyNames()
+          {
+            return new[]
+            {
+              nameof(Base.Id),
+            };
+          }
+        }
+      ");
+
+      AssertNoUnmappedProperties(diagnostics);
+    }
+
+    [Test]
+    public async Task DerivedUnmappedAttribute_WithBraces_DoesNotFail()
+    {
+      var diagnostics = await Analyze(@"
+        public class Base
+        {
+          public int Id { get; set; }
+        }
+
+        public class Person : Base
+        {
+          public string FirstName { get; set; }
+          public string LastName { get; set; }
+        }
+
+        [MappingMethod]
+        [BaseIgnoreProperties()]
+        public static Person Map()
+        {
+          return new Person { FirstName = ""Test"", LastName = ""Test2"" };
+        }
+
+        [AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
+        public class BaseIgnorePropertiesAttribute : UnmappedPropertiesAttribute
+        {
+          public BaseIgnorePropertiesAttribute() 
+            : base(GetUnmappedPropertyNames())
+          {
+          }
+          
+          private static string[] GetUnmappedPropertyNames()
+          {
+            return new[]
+            {
+              nameof(Base.Id),
+            };
+          }
+        }
+      ");
+
+      AssertNoUnmappedProperties(diagnostics);
+    }
+
+    [Test]
+    public async Task DerivedUnmappedAttribute_WholeNameWithBraces_DoesNotFail()
+    {
+      var diagnostics = await Analyze(@"
+        public class Base
+        {
+          public int Id { get; set; }
+        }
+
+        public class Person : Base
+        {
+          public string FirstName { get; set; }
+          public string LastName { get; set; }
+        }
+
+        [MappingMethod]
+        [BaseIgnorePropertiesAttribute()]
+        public static Person Map()
+        {
+          return new Person { FirstName = ""Test"", LastName = ""Test2"" };
+        }
+
+        [AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
+        public class BaseIgnorePropertiesAttribute : UnmappedPropertiesAttribute
+        {
+          public BaseIgnorePropertiesAttribute() 
+            : base(GetUnmappedPropertyNames())
+          {
+          }
+          
+          private static string[] GetUnmappedPropertyNames()
+          {
+            return new[]
+            {
+              nameof(Base.Id),
+            };
+          }
+        }
+      ");
+
+      AssertNoUnmappedProperties(diagnostics);
+    }
+
+    [Test]
+    public async Task DerivedUnmappedAttribute_WholeNameWithoutBraces_DoesNotFail()
+    {
+      var diagnostics = await Analyze(@"
+        public class Base
+        {
+          public int Id { get; set; }
+        }
+
+        public class Person : Base
+        {
+          public string FirstName { get; set; }
+          public string LastName { get; set; }
+        }
+
+        [MappingMethod]
+        [BaseIgnorePropertiesAttribute]
+        public static Person Map()
+        {
+          return new Person { FirstName = ""Test"", LastName = ""Test2"" };
+        }
+
+        [AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
+        public class BaseIgnorePropertiesAttribute : UnmappedPropertiesAttribute
+        {
+          public BaseIgnorePropertiesAttribute() 
+            : base(GetUnmappedPropertyNames())
+          {
+          }
+          
+          private static string[] GetUnmappedPropertyNames()
+          {
+            return new[]
+            {
+              nameof(Base.Id),
+            };
+          }
+        }
+      ");
+
+      AssertNoUnmappedProperties(diagnostics);
     }
 
     private void AssertMissingMappingTargetType(ImmutableArray<Diagnostic> diagnostics)

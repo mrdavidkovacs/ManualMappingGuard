@@ -3,13 +3,11 @@ using System;
 namespace ManualMappingGuard
 {
   [AttributeUsage(AttributeTargets.Method, AllowMultiple = true)]
-  public class UnmappedPropertyAttribute : Attribute
+  public class UnmappedPropertyAttribute : UnmappedPropertiesAttribute
   {
-    public string PropertyName { get; }
-
     public UnmappedPropertyAttribute(string propertyName)
+      : base(propertyName == null ? null! : new[] {propertyName})
     {
-      PropertyName = propertyName ?? throw new ArgumentNullException(nameof(propertyName));
     }
   }
 }

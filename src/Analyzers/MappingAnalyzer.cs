@@ -1,12 +1,16 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.IO;
 using System.Linq;
+using System.Reflection;
+using System.Text;
 using ManualMappingGuard.Analyzers.Extensions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
+using Microsoft.CodeAnalysis.Emit;
 
 namespace ManualMappingGuard.Analyzers
 {
@@ -56,13 +60,9 @@ namespace ManualMappingGuard.Analyzers
       }
 
       var excludedPropertyNames = method.GetAttributes()
-        .Where(a => a.AttributeClass.InheritsFromOrEquals(context.Compilation.GetExistingType<UnmappedPropertyAttribute>()))
-        .Select(a => (string) a.ConstructorArguments[0].Value)
-        .ToList();
-
-      excludedPropertyNames.AddRange(method.GetAttributes()
         .Where(a => a.AttributeClass.InheritsFromOrEquals(context.Compilation.GetExistingType<UnmappedPropertiesAttribute>()))
-        .SelectMany(a => a.ConstructorArguments[0].Values.Select(v => (string) v.Value)));
+        .SelectMany(a => this.ExtractPropertyNamesFromAttribute(a, context.Compilation))
+        .ToList();
 
       var unmappedPropertyNames = mappingTargetProperties
         .Except(mappedProperties, new RootPropertyEqualityComparer())
@@ -74,6 +74,83 @@ namespace ManualMappingGuard.Analyzers
       {
         var diagnostic = Diagnostic.Create(Diagnostics.UnmappedProperty, location, unmappedPropertyName);
         context.ReportDiagnostic(diagnostic);
+      }
+    }
+
+    private IEnumerable<string> ExtractPropertyNamesFromAttribute(AttributeData att, Compilation compilation)
+    {
+      var symbolDisplayFormat = new SymbolDisplayFormat(typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces);
+      string fullyQualifiedName = att.AttributeClass.ToDisplayString(symbolDisplayFormat);
+      string sourceText = att.ApplicationSyntaxReference.SyntaxTree.GetText().GetSubText(att.ApplicationSyntaxReference.Span).ToString();
+
+      StringBuilder sb = new StringBuilder();
+
+      int indexOfBracket = sourceText.IndexOf("(", StringComparison.Ordinal);
+
+      if (indexOfBracket < 0)
+      {
+        sb.Append(fullyQualifiedName)
+          .Append("()");
+      }
+      else
+      {
+        sb.Append(fullyQualifiedName)
+          .Append(sourceText.Substring(indexOfBracket));
+      }
+
+      string formattableString = $@"
+        using System;
+        using System.Collections.Generic;
+
+        namespace Test
+        {{
+          public class Tester
+          {{
+            public static void Main(string[] args)
+            {{
+            }}
+
+            public IEnumerable<string> TestMe()
+            {{
+              return new {sb.ToString()}.PropertyNames;
+            }}
+          }}
+        }}";
+      
+      CSharpCompilation temp = CSharpCompilation.Create(Guid.NewGuid().ToString("N"))
+        .AddSyntaxTrees(att.ApplicationSyntaxReference.SyntaxTree)
+        .AddSyntaxTrees(CSharpSyntaxTree.ParseText(formattableString))
+        .AddReferences(compilation.References);
+
+      using (var ms = new MemoryStream())
+      {
+        EmitResult result = temp.Emit(ms);
+
+        if (!result.Success)
+        {
+          IEnumerable<Diagnostic> failures = result.Diagnostics.Where(diagnostic => 
+            diagnostic.IsWarningAsError || 
+            diagnostic.Severity == DiagnosticSeverity.Error);
+
+          foreach (Diagnostic diagnostic in failures)
+          {
+            Console.Error.WriteLine("{0}: {1}", diagnostic.Id, diagnostic.GetMessage());
+          }
+
+          return new List<string>();
+        }
+
+        ms.Seek(0, SeekOrigin.Begin);
+        Assembly assembly = Assembly.Load(ms.ToArray());
+
+        Type type = assembly.GetType("Test.Tester");
+
+        var obj = Activator.CreateInstance(type);
+        List<string> x = ((IEnumerable<string>) type.InvokeMember("TestMe",
+          BindingFlags.Default | BindingFlags.InvokeMethod,
+          null, obj, null)).ToList();
+
+        return x;
       }
     }
   }
